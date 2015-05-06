@@ -45,6 +45,7 @@ class client:
         self.error_stack = []
         self.id = 0
         self.authenticated = False
+
         assert type(self.host) is StringType, "{m}{h}".format(
             m="hostname is not a string:",
             h=self.host)
@@ -52,6 +53,7 @@ class client:
             m="port is not a number:",
             p=self.port)
         assert type(self.password) is StringType, "password is not a string"
+
         try:
             self.connection = msocket.msocket(self.host, self.port)
         except(msocket.error) as ret_val:
@@ -70,20 +72,23 @@ class client:
         except(msocket.error) as ret_val:
             if con is False:
                 self._manage_rcon_error(ret_val)
-                return false
+                return False
         return True
 
     def _pack_data(self, type_name, msg):
         """private method for crafting RCON requests"""
         if not msg:
             msg = ""
+
         msg_len = len(msg)
         size = msg_len + MIN_PACKET_SIZE
+
         if msg_len > MAX_BODY_SIZE:
             self._manage_rcon_error("{m}\n{s}".format(
                 m="Request message body too large. MAX=",
                 s=str(MAX_BODY_SIZE)))
             return False
+
         try:
             request = "{s}{i}{t}{m}{n1}{n2}".format(
                 s=struct.pack('<i', size),
@@ -95,52 +100,63 @@ class client:
                 m="Unable to pack data into TCP request: ",
                 s=str(self.error_stack)))
             return False
+
         return request
 
     def _unpack_data(self, response):
         """private method to unpack the data and return the ascii message"""
         response_size = len(response)
         msg_size = response_size - MIN_PACKET_ACTUAL_SIZE
+
         if response_size == 0:
             self._manage_rcon_error("Zero length response from server")
             return False
+
         unpack_fmt = "{i}{m}{n}".format(i="<iii", m=str(msg_size), n="sxx")
+
         try:
             payload = struct.unpack(unpack_fmt, response)
         except(struct.error) as ret_val:
             self._manage_rcon_error(ret_val)
             return False
+
         size = payload[0]
         payload_id = payload[1]
         type_name = payload[2]
         msg = payload[3]
+
         return (payload_id, type_name, msg)
 
     def _send(self, type_name, msg):
         """private send method for handling the dirty work in
         sending a request"""
+
         if not self.connection:
             try:
                 self._connect()
             except(error) as ret_val:
                 return False
             return False
+
         try:
             request = self._pack_data(type_name, msg)
         except(error) as ret_val:
             return False
+
         try:
             response = self.connection.manage(request)
         except(msocket.error) as ret_val:
             self._manage_rcon_error(ret_val)
-            return false
+            return False
+
         if not response:
             self._manage_rcon_error("Empty response from server")
-            return false
+            return False
+
         try:
             response = self._unpack_data(response)
         except(error) as ret_val:
-            return false
+            return False
         return response
 
     def _authenticate(self):
@@ -149,10 +165,13 @@ class client:
             response = self._send(SERVERDATA_AUTH, self.password)
         except(error) as ret_val:
             return False
+
         if response[0] == -1:
             self._manage_rcon_error("Authentication failure")
             return False
+
         self.authenticated = True
+
         return True
 
     def send(self, msg):
@@ -160,11 +179,13 @@ class client:
         does not necessarily disconnect. Returns the response.
         """
         self.id = self.id + 1
+
         if not self.authenticated:
             try:
                 self._authenticate()
             except Exception:
                 return False
+
         try:
             response = self._send(SERVERDATA_EXECCOMMAND, msg)
         except Exception:
@@ -174,14 +195,17 @@ class client:
 
         if response[0] == -1:
             self.authenticated = False
+
             try:
                 self._authenticate()
             except Exception:
                 return False
+
             try:
                 response = self._send(SERVERDATA_EXECCOMMAND, msg)
             except Exception:
                 return False
+
         return response_msg
 
     def disconnect(self):

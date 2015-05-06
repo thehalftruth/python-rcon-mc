@@ -24,11 +24,14 @@ class msocket:
         self.host = host
         self.port = port
         self.connection = False
+
         if timeout:
             self.timeout = timeout[0]
         else:
             self.timeout = 1
+
         self.error_stack = []
+
         assert type(self.host) is StringType, "{m}{h}".format(
             m="hostname is not a string:", h=self.host)
         assert type(self.port) is IntType, "{m}{p}".format(
@@ -39,6 +42,7 @@ class msocket:
     def _manage_socket_error(self, ret_val):
         if self.connection:
             self.connection.close()
+
         self.connection = None
         self.error_stack.append(ret_val)
         raise MSocketError(str(self.error_stack))
@@ -47,26 +51,31 @@ class msocket:
         """Resolve remote host and connect however possible (IPV6 compat)"""
         if self.connection:
             return self.connection
+
         for con in socket.getaddrinfo(self.host,
                                       self.port,
                                       socket.AF_UNSPEC,
                                       socket.SOCK_STREAM):
             addr_fam, sock_type, proto, canonical_name, server_addr = con
+
             try:
                 self.connection = socket.socket(addr_fam, sock_type, proto)
             except socket.error as ret_val:
                 self._manage_socket_error(ret_val)
                 continue
+
             try:
                 self.connection.settimeout(self.timeout)
             except(socket.error) as ret_val:
                 self._manage_socket_error(ret_val)
                 continue
+
             try:
                 self.connection.connect(server_addr)
             except(socket.error) as ret_val:
                 self._manage_socket_error(ret_val)
                 continue
+
             if not self.connection:
                 continue
             break
@@ -105,29 +114,41 @@ class msocket:
         """
         not_ready = 0
         packet = ""
+
         if not buflen:
             buflen = 1024  # rather arbitrary read amount
+
         packet_size = 0
+
         while True:
+
             if self.connection is not None or False:
                 rdy = select.select([self.connection.fileno()], [], [], .3)[0]
+
                 if rdy:
+
                     try:
                         cpacket = self.connection.recv(buflen)
+
                         if not cpacket:
                             break
+
                     except(socket.error) as ret_val:
                         self._manage_socket_error(ret_val)
                         return False
+
                     cpacket_size = len(cpacket)
                     packet_size = packet_size + cpacket_size
+
                     if packet_size > 0:
                         packet = packet + cpacket
                     else:
                         packet = cpacket
+
                     continue
                 else:
                     not_ready = not_ready + 1
+
                     if not_ready > 2:
                         break
             break
@@ -142,14 +163,17 @@ class msocket:
         except(error):
             print error
             return False
+
         try:
             self.send(packet)
         except(error):
             print error
             return False
+
         try:
             response = self.receive()
         except(error):
             print error
             return False
+
         return response
